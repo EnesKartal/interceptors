@@ -51,19 +51,30 @@ export class FetchInterceptor extends Interceptor<HttpRequestEventMap> {
     this.subscriptions.push(
       patchesRegistry.applyPatch(globalThis, 'fetch', (realFetch) => {
         return (input, init) => {
-          /**
-           * Resolve potentially relative request URL against the present `location`.
-           * This is mainly for native `fetch` in browser-like environments.
-           * @see https://github.com/mswjs/msw/issues/1625
-           */
-          const resolvedInput =
-            typeof input === 'string' &&
-            typeof location !== 'undefined' &&
-            !URL.canParse(input)
-              ? new URL(input, location.href)
-              : input
+          let request: Request
 
-          const request = new Request(resolvedInput, init)
+          try {
+            /**
+             * Resolve potentially relative request URL against the present `location`.
+             * This is mainly for native `fetch` in browser-like environments.
+             * @see https://github.com/mswjs/msw/issues/1625
+             */
+            const resolvedInput =
+              typeof input === 'string' &&
+              typeof location !== 'undefined' &&
+              !URL.canParse(input)
+                ? new URL(input, location.href)
+                : input
+
+            request = new Request(resolvedInput, init)
+          } catch (error) {
+            /**
+             * @note Native `fetch` never throws synchronously. It rejects
+             * with the error thrown while constructing the request instead
+             * (e.g. an invalid header name or value).
+             */
+            return Promise.reject(error)
+          }
 
           /**
            * @note Scope the request context to the `fetch` call itself.
